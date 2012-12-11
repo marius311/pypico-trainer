@@ -21,7 +21,7 @@
         
         character(LEN=Ini_max_string_len) numstr, VectorFileName, &
             InputFile, ScalarFileName, TensorFileName, TotalFileName, LensedFileName,&
-            LensedTotFileName, LensPotentialFileName
+            LensedTotFileName, LensPotentialFileName, buf
         integer i
         character(LEN=Ini_max_string_len) TransferFileNames(max_transfer_redshifts), &
                MatterPowerFileNames(max_transfer_redshifts), outroot, version_check
@@ -139,53 +139,39 @@
        end if
 
 
-       
+
+    !---------------------------------
+    ! This section modified to manually specify mpk/transfer redshifts and output them
+    ! into one file even if non-linear lensing is on.
+    !
+       P%Transfer%high_precision=  Ini_Read_Logical('transfer_high_precision',.false.)
+
        if (P%WantTransfer)  then
-        P%Transfer%high_precision=  Ini_Read_Logical('transfer_high_precision',.false.)
         P%transfer%kmax          =  Ini_Read_Double('transfer_kmax')
         P%transfer%k_per_logint  =  Ini_Read_Int('transfer_k_per_logint')
         P%transfer%num_redshifts =  Ini_Read_Int('transfer_num_redshifts')
-        
+        buf = Ini_Read_String("transfer_redshifts")
+        read (buf,*) P%transfer%redshifts(1:P%transfer%num_redshifts)
+
         transfer_interp_matterpower = Ini_Read_Logical('transfer_interp_matterpower ', transfer_interp_matterpower)
         transfer_power_var = Ini_read_int('transfer_power_var',transfer_power_var)
         if (P%transfer%num_redshifts > max_transfer_redshifts) stop 'Too many redshifts'
-        do i=1, P%transfer%num_redshifts
-             P%transfer%redshifts(i)  = Ini_Read_Double_Array('transfer_redshift',i,0._dl)
-             transferFileNames(i)     = Ini_Read_String_Array('transfer_filename',i)
-             MatterPowerFilenames(i)  = Ini_Read_String_Array('transfer_matterpower',i)
-             
-             if (TransferFileNames(i) == '') then
-                 TransferFileNames(i) =  trim(numcat('transfer_',i))//'.dat' 
-             end if
-             if (MatterPowerFilenames(i) == '') then
-                 MatterPowerFilenames(i) =  trim(numcat('matterpower_',i))//'.dat' 
-             end if
-             if (TransferFileNames(i)/= '') &
-                   TransferFileNames(i) = trim(outroot)//TransferFileNames(i)
-             if (MatterPowerFilenames(i) /= '') &
-                 MatterPowerFilenames(i)=trim(outroot)//MatterPowerFilenames(i)
-        end do
-
-
         P%transfer%kmax=P%transfer%kmax*(P%h0/100._dl)
-                
-       else
-         P%transfer%high_precision = .false.
-       endif
 
-       if (P%NonLinear==NonLinear_lens .and. P%DoLensing) then
-          if (P%WantTransfer) &
-             write (*,*) 'overriding transfer settings to get non-linear lensing'
+        do i=1, P%transfer%num_redshifts
+           transferFileNames(i)     = trim(outroot) //Ini_Read_String('transfer_filename')
+           MatterPowerFilenames(i)  = trim(outroot) //Ini_Read_String('transfer_matterpower')
+        end do
+       else if (P%NonLinear==NonLinear_lens .and. P%DoLensing) then
           P%WantTransfer  = .true.
           call Transfer_SetForNonlinearLensing(P%Transfer)
-          P%Transfer%high_precision=  Ini_Read_Logical('transfer_high_precision',.false.)
-          do i=1, P%transfer%num_redshifts
-             transferFileNames(i)     = ''
-             MatterPowerFilenames(i)  = ''
-          end do
-          transferFileNames(p%transfer%num_redshifts) = Ini_Read_String_Array('transfer_filename',1)
-          MatterPowerFilenames(p%transfer%num_redshifts) = Ini_Read_String_Array('transfer_matterpower',1)
        end if
+    !
+    !---------------------------------
+
+
+
+
 
         Ini_fail_on_not_found = .false. 
   
@@ -282,13 +268,6 @@
         lSampleBoost   = 50
        else
         lSampleBoost   = Ini_Read_Double('l_sample_boost',lSampleBoost)
-       end if
-       if (outroot /= '') then
-         if (InputFile /= trim(outroot) //'params.ini') then   
-          call Ini_SaveReadValues(trim(outroot) //'params.ini',1)
-         else
-          write(*,*) 'Output _params.ini not created as would overwrite input'    
-         end if
        end if
 
        call Ini_Close
