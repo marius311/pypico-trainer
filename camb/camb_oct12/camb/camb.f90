@@ -356,10 +356,10 @@
             logical OK
 
              OK = .true.
-             if (.not. P%WantTransfer .and. .not. P%WantCls) then
-                OK = .false.
-                write(*,*) 'There is nothing to do! Do transfer functions or Cls.'
-             end if
+             !if (.not. P%WantTransfer .and. .not. P%WantCls) then
+             !   OK = .false.
+             !   write(*,*) 'There is nothing to do! Do transfer functions or Cls.'
+             !end if
 
              if (P%h0 < 20._dl.or.P%h0 > 200._dl) then
                OK = .false.

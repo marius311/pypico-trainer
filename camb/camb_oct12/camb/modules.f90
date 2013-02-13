@@ -2474,6 +2474,7 @@
 
                         write(*,'("zdrag                = ",f8.2)') ThermoDerivedParams( derived_zdrag )
                         write(*,'("r_s(zdrag)/Mpc       = ",f7.2)') ThermoDerivedParams( derived_rdrag )
+                        print *, 'DA(zstar) =', DA
 
                         write(*,'("k_D(zstar) Mpc       = ",f7.4)') ThermoDerivedParams( derived_kD )
                         write(*,'("100*theta_D          = ",f9.6)') ThermoDerivedParams( derived_thetaD )

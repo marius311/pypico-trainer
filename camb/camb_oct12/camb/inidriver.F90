@@ -12,6 +12,8 @@
         use Transfer
         use constants
         use Bispectrum
+        use thermodata, only: inithermo
+        use cambmain, only: initvars
 #ifdef NAGF95 
         use F90_UNIX
 #endif
@@ -279,10 +281,13 @@
 #endif 
 
        if (FeedbackLevel > 0) then
-         Age = CAMB_GetAge(P) 
+         Age = CAMB_GetAge(P)
+         call cambparams_set(p)
+         call initvars
          write (*,'("Age of universe/GYr  = ",f7.3)') Age  
        end if 
 
+       
        if (global_error_flag==0) call CAMB_GetResults(P)
        if (global_error_flag/=0) then
         write (*,*) 'Error result '//trim(global_error_message)
