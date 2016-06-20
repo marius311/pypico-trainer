@@ -124,7 +124,7 @@ class tailmonty(PICO):
         self._data = data
 
 
-    def get(self, outputs=None, force=False, **inputs):
+    def get(self, outputs=None, derive=None, force=False, **inputs):
         """
         Run PICO to get some outputs given some set of inputs.
 
@@ -139,6 +139,9 @@ class tailmonty(PICO):
                             computation time by only getting those outputs you need.
                             Valid outputs are given by PICO.outputs().
                             (default: all of them)
+
+        derive, optional : Compute dCl/dparam. `derive` should be a dictionary
+                           giving the number of derivatives with respect to each parameter.
 
         force, optional : Use PICO even if the point is outside the training region
                           and may return an innaccurate result.
@@ -170,7 +173,7 @@ class tailmonty(PICO):
             if not output in ['cl_%s'%x for x in ['TT','TE','EE','BB']]:
                 for region in self._data['fits'][output]:
                     try:
-                        r = region.get_result(inputs,force=force)
+                        r = region.get_result(inputs,derive=derive,force=force)
                         result[output] = r
                         break
                     except CantUsePICO as e:
@@ -274,9 +277,9 @@ class DefaultInputter(Cleanupable):
         return {k:mean(v) for k,v in xinputs.items()}
 
 
-    def xinputs_to_coeffs(self,xinputs):
+    def xinputs_to_coeffs(self,xinputs,derive=None):
         """Given a set of xinputs, get the terms of the fitting polynomial."""
-        return array(self.poly({k:(xinputs[k]-self.xinput_center[k]) for k in self.xinputs_order().keys()})).T
+        return array(self.poly({k:(xinputs[k]-self.xinput_center[k]) for k in self.xinputs_order().keys()},derive=derive)).T
 
 
     def calc_bounds(self):
@@ -394,7 +397,7 @@ class PicoFit(object):
     def get_result(self,inputs,derive=None,force=False):
         xinputs = self.inputter.inputs_to_xinputs(**inputs)
         if not force: self.inputter.check_inputs(inputs, xinputs)
-        coefficients = self.inputter.xinputs_to_coeffs(xinputs)
+        coefficients = self.inputter.xinputs_to_coeffs(xinputs,derive=derive)
         allinputs = {}; allinputs.update(inputs); allinputs.update(xinputs);
         r = self.outputter.xoutputs_to_outputs(dot(transpose(coefficients),self.x),allinputs)
         return r
