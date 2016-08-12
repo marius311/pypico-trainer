@@ -7,7 +7,7 @@ from scipy.interpolate import splrep, splev
 from collections import defaultdict
 from scipy.linalg import solve
 from itertools import chain
-import cPickle
+import cPickle as pickle
 
 def getpoly(names,order):
     if type(order)==int: order = dict((n,order) for n in names)
@@ -48,16 +48,32 @@ def get_pico():
     import cosmoslik as K
     from pandas import DataFrame
     
+    ntest = 500
+    
     lvals = loadtxt("lvalues",dtype=int)
     lvals = lvals[lvals<2510]
     
-    chain = K.utils.load_chain("chain_lcdm_omk_goodsamps.chain")
-    chain['cosmo.As'] = exp(chain['cosmo.logA'])/10
+    names,ps,cl = pickle.load(open("results.dat"))
+    idxs = array([len(x)==5500 for x in cl])
+    cl = vstack(cl[idxs])[:-ntest]
+    ps = ps[idxs][:-ntest]
     
-    inputs = DataFrame({k.replace('cosmo.',''):v for k,v in chain.items() if 'cosmo' in k})
-    inputter = SameOrderInputter(3,inputs=inputs)
+    name_mapping = {
+        'hubble':'H0',
+        'omch2':'omch2',
+        'ombh2':'ombh2',
+        'omk':'omk',
+        're_optical_depth':'tau',
+        'scalar_amp(1)':'As',
+        'scalar_spectral_index(1)':'ns'
+    }
+    names = [name_mapping[n] for n in names]
+    
+    
+    inputs = dict(zip(names,ps.T))
+    inputter = SameOrderInputter(4,inputs=inputs)
 
-    outputs = (chain['clTT']*arange(2510)*(arange(2510)+1)/2/pi)[:,lvals]
+    outputs = cl[:,lvals]
     outputter = DefaultOutputter(inputs,outputs,xindices=lvals,indices=arange(max(lvals)))
     
     fit = PicoFit(inputter,outputter)
@@ -118,7 +134,7 @@ class jcdemo(PICO):
 
 
     def inputs(self):
-        return self._fit.inputter.inputs()
+        return self._fit.inputter.inputs_used()
 
     def outputs(self):
         return ['cl_TT']
@@ -127,7 +143,7 @@ class jcdemo(PICO):
         """
         An example set of inputs, which can be passed to pico.get(**pico.example_inputs())
         """
-        return {'As': 2.08,
+        return {'As': 2.08e-9,
                 'ns': 0.97,
                 'tau': 0.055,
                 'ombh2': 0.0225,
@@ -165,7 +181,7 @@ class DefaultInputter(Cleanupable):
         self.calc_bounds()
 
 
-    def inputs(self):
+    def inputs_used(self):
         return ['As',
                 'ns',
                 'tau',
@@ -175,6 +191,7 @@ class DefaultInputter(Cleanupable):
                 'omk']
 
     def inputs_to_xinputs(self,**inputs):
+        inputs['ommh3'] = (inputs['omch2'] + inputs['ombh2'])*(inputs['H0']/100.)
         return inputs
 
     def get_xinput_center(self,xinputs):
@@ -204,7 +221,7 @@ class DefaultInputter(Cleanupable):
             if not lower<=xinputs[k]<=upper: raise CantUsePICO("Parameter '%s'=%.5g is outside the PICO region bounds %.5g < %s < %.5g"%(k,xinputs[k],lower,k,upper))
         s = self._get_region_dist(xinputs)
         if s>1:
-            allinputs = xinputs.copy(); allinputs.update({k:v for k,v in inputs.items() if k in self.inputs()})
+            allinputs = xinputs.copy(); allinputs.update({k:v for k,v in inputs.items() if k in self.inputs_used()})
             raise CantUsePICO("Point is outside of PICO interpolation region. Distance from center is %.2f but needs to be less than 1. %s"%(s,allinputs))
 
 
@@ -246,7 +263,7 @@ class SameOrderInputter(DefaultInputter):
                   'ns',
                   'tau',
                   'ombh2',
-                  'omch2',
+                  'ommh3',
                   'H0',
                   'omk']
         return {i:self.order for i in inputs}
