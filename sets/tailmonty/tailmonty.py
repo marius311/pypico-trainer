@@ -4,10 +4,10 @@ from pypico import CantUsePICO, PICO, create_pico
 import os, re
 from math import factorial
 from scipy.interpolate import splrep, splev
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from scipy.linalg import solve
 from itertools import chain
-import cPickle
+import pickle
 
 def getpoly(names,order):
     if type(order)==int: order = dict((n,order) for n in names)
@@ -60,22 +60,22 @@ def get_pico():
     data['k'] = kvalues = loadtxt('kvalues')
 
     for region in ['inner7']:
-        print "Loading %s data..."%region
+        print("Loading %s data..."%region)
         with open('reduced.%s'%region) as f:
-            samples=[v for k,v in cPickle.load(f).items() if all([k2 in v for k2 in ['scal','lens','trans']])]
+            samples=[v for k,v in list(pickle.load(f).items()) if all([k2 in v for k2 in ['scal','lens','trans']])]
 
         if (len(samples)-ntest)<0: raise Exception('Not enough samples to leave %i test points.'%ntest)
         else: samples = samples[:-ntest]
 
         ells = samples[0]['lens'][:,0]
-        inputs = {n:array([dict(d['cps'])[n] for d in samples]) for n in samples[0]['cps'].keys()}
+        inputs = {n:array([dict(d['cps'])[n] for d in samples]) for n in list(samples[0]['cps'].keys())}
         scal = array([d['scal'][:len(ells)] for d in samples])
         lens = array([d['lens'][:len(ells)] for d in samples])
         trans = array([interp(kvalues,*d['trans'][:,[0,1]].T) for d in samples])
 
-        print 'Fitting %i samples.'%len(samples)
+        print('Fitting %i samples.'%len(samples))
 
-        print "Factoring polynomials..."
+        print("Factoring polynomials...")
         all_fit_inputter = SameOrderInputter(order=6, inputs=inputs)
         clpp_fit_inputter = ClppInputter(inputs)
         mpk_fit_inputter = MpkInputter(inputs)
@@ -94,7 +94,7 @@ def get_pico():
                 ('cl_pT', all_fit_inputter, MyDefaultOutputter(scal[:,:,5]))]
 
         for (name,inputter,outputter) in work:
-            print "Computing %s fit..."%name
+            print("Computing %s fit..."%name)
             r = PicoFit(inputter, outputter)
             data['fits'][name] = data['fits'].get(name,[]) + [r]
 
@@ -150,6 +150,7 @@ class tailmonty(PICO):
         """
         result = {}
 
+        if isinstance(outputs,str): outputs = [outputs]
         outputs = set(outputs or self.outputs())
 
         if 'k' in outputs:
@@ -177,9 +178,10 @@ class tailmonty(PICO):
                         result[output] = r
                         break
                     except CantUsePICO as e:
+                        err = e
                         pass
                 else:
-                    raise e
+                    raise err
 
         #Combine lensing contributions
         for x in xs:
@@ -203,10 +205,10 @@ class tailmonty(PICO):
 
 
     def inputs(self):
-        return set(chain(['Alens','pivot_scalar'],*(region.inputter.inputs() for fit in self._data['fits'].values() for region in fit)))
+        return set(chain(['Alens','pivot_scalar'],*(region.inputter.inputs() for fit in list(self._data['fits'].values()) for region in fit)))
 
     def outputs(self):
-        return ['cl_TT','cl_TE','cl_EE','cl_BB','k']+self._data['fits'].keys()
+        return ['cl_TT','cl_TE','cl_EE','cl_BB','k']+list(self._data['fits'].keys())
 
     def example_inputs(self):
         """
@@ -246,7 +248,7 @@ class DefaultInputter(Cleanupable):
         self.inputs = inputs
         self.xinputs = self.inputs_to_xinputs(**inputs)
         self.xinput_center = self.get_xinput_center(self.xinputs)
-        self.poly = getpoly(self.xinputs_order().keys(),self.xinputs_order())
+        self.poly = getpoly(list(self.xinputs_order().keys()),self.xinputs_order())
         self.coefficients = self.xinputs_to_coeffs(self.xinputs)
         self.qr = qr(self.coefficients)
         self.input_center = self.get_xinput_center(self.xinputs)
@@ -274,12 +276,12 @@ class DefaultInputter(Cleanupable):
         return inputs
 
     def get_xinput_center(self,xinputs):
-        return {k:mean(v) for k,v in xinputs.items()}
+        return {k:mean(v) for k,v in list(xinputs.items())}
 
 
     def xinputs_to_coeffs(self,xinputs,derive=None):
         """Given a set of xinputs, get the terms of the fitting polynomial."""
-        return array(self.poly({k:(xinputs[k]-self.xinput_center[k]) for k in self.xinputs_order().keys()},derive=derive)).T
+        return array(self.poly({k:(xinputs[k]-self.xinput_center[k]) for k in list(self.xinputs_order().keys())},derive=derive)).T
 
 
     def calc_bounds(self):
@@ -303,7 +305,7 @@ class DefaultInputter(Cleanupable):
             if not lower<=xinputs[k]<=upper: raise CantUsePICO("Parameter '%s'=%.5g is outside the PICO region bounds %.5g < %s < %.5g"%(k,xinputs[k],lower,k,upper))
         s = self._get_region_dist(xinputs)
         if s>1:
-            allinputs = xinputs.copy(); allinputs.update({k:v for k,v in inputs.items() if k in self.inputs()})
+            allinputs = xinputs.copy(); allinputs.update({k:v for k,v in list(inputs.items()) if k in self.inputs()})
             raise CantUsePICO("Point is outside of PICO interpolation region. Distance from center is %.2f but needs to be less than 1. %s"%(s,allinputs))
 
 
@@ -358,27 +360,29 @@ class SameOrderInputter(DefaultInputter):
 
 class ClppInputter(DefaultInputter):
     def xinputs_order(self):
-        inputs = {'scalar_nrun(1)':3,
-                  'omnuh2':5,
-                  'omch2':5,
-                  'theta':5,
-                  'massive_neutrinos':5,
-                  'scalar_spectral_index(1)':5,
-                  'ombh2':5,
-                  'scalar_amp(1)':6}
+        inputs = OrderedDict([
+                  ['scalar_nrun(1)',3],
+                  ['massive_neutrinos',5],
+                  ['omch2',5],
+                  ['theta',5],
+                  ['omnuh2',5],
+                  ['scalar_spectral_index(1)',5],
+                  ['ombh2',5],
+                  ['scalar_amp(1)',6]])
         return inputs
 
 
 class MpkInputter(DefaultInputter):
     def xinputs_order(self):
-        inputs = {'scalar_nrun(1)':3,
-                  'omnuh2':3,
-                  'omch2':3,
-                  'theta':3,
-                  'massive_neutrinos':3,
-                  'scalar_spectral_index(1)':3,
-                  'ombh2':3,
-                  'scalar_amp(1)':3}
+        inputs = OrderedDict([
+                  ['scalar_nrun(1)',3],
+                  ['massive_neutrinos',3],
+                  ['omch2',3],
+                  ['theta',3],
+                  ['omnuh2',3],
+                  ['scalar_spectral_index(1)',3],
+                  ['ombh2',3],
+                  ['scalar_amp(1)',3]])
         return inputs
 
 
