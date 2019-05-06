@@ -326,7 +326,7 @@ class DefaultOutputter(Cleanupable):
         self.xoutputs = self.outputs_to_xoutputs(outputs,inputs)
 
     def xoutputs_to_outputs(self,xoutputs,allinputs):
-        if self.indicies!=None:
+        if self.indicies is not None:
             xoutputs = splev(self.indicies,splrep(self.xindices,xoutputs)) #ext=1
         return xoutputs
 
