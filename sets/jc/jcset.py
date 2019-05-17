@@ -4,10 +4,10 @@ from pypico import CantUsePICO, PICO, create_pico
 import os, re
 from math import factorial
 from scipy.interpolate import splrep, splev
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from scipy.linalg import solve
 from itertools import chain
-import cPickle as pickle
+import pickle as pickle
 
 def getpoly(names,order):
     if type(order)==int: order = dict((n,order) for n in names)
@@ -70,7 +70,7 @@ def get_pico():
     names = [name_mapping[n] for n in names]
     
     
-    inputs = dict(zip(names,ps.T))
+    inputs = dict(list(zip(names,ps.T)))
     inputter = SameOrderInputter(4,inputs=inputs)
 
     outputs = cl[:,lvals]
@@ -174,7 +174,7 @@ class DefaultInputter(Cleanupable):
         self.inputs = inputs
         self.xinputs = self.inputs_to_xinputs(**inputs)
         self.xinput_center = self.get_xinput_center(self.xinputs)
-        self.poly = getpoly(self.xinputs_order().keys(),self.xinputs_order())
+        self.poly = getpoly(list(self.xinputs_order().keys()),self.xinputs_order())
         self.coefficients = self.xinputs_to_coeffs(self.xinputs)
         self.qr = qr(self.coefficients)
         self.input_center = self.get_xinput_center(self.xinputs)
@@ -195,11 +195,11 @@ class DefaultInputter(Cleanupable):
         return inputs
 
     def get_xinput_center(self,xinputs):
-        return {k:mean(v) for k,v in xinputs.items()}
+        return {k:mean(v) for k,v in list(xinputs.items())}
 
     def xinputs_to_coeffs(self,xinputs,derive=None):
         """Given a set of xinputs, get the terms of the fitting polynomial."""
-        return array(self.poly({k:(xinputs[k]-self.xinput_center[k]) for k in self.xinputs_order().keys()},derive=derive)).T
+        return array(self.poly({k:(xinputs[k]-self.xinput_center[k]) for k in list(self.xinputs_order().keys())},derive=derive)).T
 
     def calc_bounds(self):
         self.xinput_region_center = {k:mean(self.xinputs[k]) for k in self.xinputs_order()}
@@ -217,11 +217,11 @@ class DefaultInputter(Cleanupable):
     def check_inputs(self, inputs, xinputs=None):
         """Raise a CantUsePICO exception if these inputs aren't in the fit region."""
         if xinputs is None: xinputs = self.inputs_to_xinputs(inputs)
-        for (k,(lower,upper)) in self.bounds.items():
+        for (k,(lower,upper)) in list(self.bounds.items()):
             if not lower<=xinputs[k]<=upper: raise CantUsePICO("Parameter '%s'=%.5g is outside the PICO region bounds %.5g < %s < %.5g"%(k,xinputs[k],lower,k,upper))
         s = self._get_region_dist(xinputs)
         if s>1:
-            allinputs = xinputs.copy(); allinputs.update({k:v for k,v in inputs.items() if k in self.inputs_used()})
+            allinputs = xinputs.copy(); allinputs.update({k:v for k,v in list(inputs.items()) if k in self.inputs_used()})
             raise CantUsePICO("Point is outside of PICO interpolation region. Distance from center is %.2f but needs to be less than 1. %s"%(s,allinputs))
 
 
@@ -259,14 +259,14 @@ class SameOrderInputter(DefaultInputter):
         super(SameOrderInputter,self).__init__(*args, **kwargs)
 
     def xinputs_order(self):
-        inputs = ['As',
+        inputs = ['tau',
                   'ns',
-                  'tau',
-                  'ombh2',
-                  'ommh3',
+                  'omk',
                   'H0',
-                  'omk']
-        return {i:self.order for i in inputs}
+                  'As',
+                  'ommh3',
+                  'ombh2']
+        return OrderedDict([(i,self.order) for i in inputs])
 
 class PicoFit(object):
     def __init__(self, inputter, outputter):
